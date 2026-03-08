@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -11,4 +5,128 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+}
+
+enum SemesterStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+model Department {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  students   Student[]
+  professors Professor[]
+  courses    Course[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Semester {
+  id          Int            @id @default(autoincrement())
+  year        Int
+  term        Int
+  name        String         @unique
+  status      SemesterStatus @default(ACTIVE)
+  courses     Course[]
+  enrollments Enrollment[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([year, term])
+  @@index([status])
+}
+
+model Student {
+  id            Int          @id @default(autoincrement())
+  studentNumber String       @unique
+  name          String
+  departmentId  Int
+  department    Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  enrollments   Enrollment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([departmentId])
+  @@index([name])
+}
+
+model Professor {
+  id           Int        @id @default(autoincrement())
+  name         String
+  departmentId Int
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  courses      Course[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([departmentId])
+  @@index([name])
+}
+
+model Course {
+  id            Int              @id @default(autoincrement())
+  code          String
+  name          String
+  credits       Int
+  capacity      Int
+  enrolledCount Int              @default(0)
+  departmentId  Int
+  professorId   Int
+  semesterId    Int
+  department    Department       @relation(fields: [departmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  professor     Professor        @relation(fields: [professorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  semester      Semester         @relation(fields: [semesterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  schedules     CourseSchedule[]
+  enrollments   Enrollment[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([semesterId, code])
+  @@index([departmentId])
+  @@index([professorId])
+  @@index([semesterId])
+  @@index([semesterId, departmentId])
+  @@index([name])
+}
+
+model CourseSchedule {
+  id          Int       @id @default(autoincrement())
+  courseId    Int
+  dayOfWeek   DayOfWeek
+  startPeriod Int
+  endPeriod   Int
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([courseId, dayOfWeek, startPeriod, endPeriod])
+  @@index([courseId])
+  @@index([dayOfWeek, startPeriod, endPeriod])
+}
+
+model Enrollment {
+  id         Int      @id @default(autoincrement())
+  studentId  Int
+  courseId   Int
+  semesterId Int
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([semesterId])
+  @@index([studentId, semesterId])
 }
