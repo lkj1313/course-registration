@@ -21,13 +21,18 @@ describe('AppController (e2e)', () => {
   });
 
   afterEach(async () => {
-    await prisma.enrollment.deleteMany();
-    await prisma.course.updateMany({
-      data: {
-        enrolledCount: 0,
-      },
-    });
-    await app.close();
+    if (prisma) {
+      await prisma.enrollment.deleteMany();
+      await prisma.course.updateMany({
+        data: {
+          enrolledCount: 0,
+        },
+      });
+    }
+
+    if (app) {
+      await app.close();
+    }
   });
 
   it('/health (GET)', () => {
@@ -155,5 +160,47 @@ describe('AppController (e2e)', () => {
 
     expect(enrollment).toBeNull();
     expect(updatedCourse.enrolledCount).toBe(0);
+  });
+
+  it('/enrollments handles concurrent requests without exceeding capacity', async () => {
+    const students = await prisma.student.findMany({
+      orderBy: { id: 'asc' },
+      take: 100,
+      select: { id: true },
+    });
+    const course = await prisma.course.findFirstOrThrow({
+      orderBy: { id: 'asc' },
+      select: { id: true, capacity: true },
+    });
+
+    await prisma.course.update({
+      where: { id: course.id },
+      data: {
+        enrolledCount: course.capacity - 1,
+      },
+    });
+
+    const responses = await Promise.all(
+      students.map((student) =>
+        request(app.getHttpServer()).post('/enrollments').send({
+          studentId: student.id,
+          courseId: course.id,
+        }),
+      ),
+    );
+
+    const successResponses = responses.filter((response) => response.status === 201);
+    const fullResponses = responses.filter(
+      (response) =>
+        response.status === 409 && response.body.code === 'COURSE_FULL',
+    );
+    const finalCourse = await prisma.course.findUniqueOrThrow({
+      where: { id: course.id },
+      select: { enrolledCount: true, capacity: true },
+    });
+
+    expect(successResponses).toHaveLength(1);
+    expect(fullResponses).toHaveLength(99);
+    expect(finalCourse.enrolledCount).toBe(finalCourse.capacity);
   });
 });

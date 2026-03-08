@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentRequestDto } from './dto/enrollment-request.dto';
 
@@ -20,41 +21,9 @@ export class EnrollmentsService {
 
   async enroll(request: EnrollmentRequestDto) {
     return this.prisma.$transaction(async (tx) => {
-      const student = await tx.student.findUnique({
-        where: { id: request.studentId },
-        select: { id: true },
-      });
+      await this.lockStudent(tx, request.studentId);
 
-      if (!student) {
-        throw this.notFound('STUDENT_NOT_FOUND', 'Student not found.');
-      }
-
-      const course = await tx.course.findUnique({
-        where: { id: request.courseId },
-        select: {
-          id: true,
-          credits: true,
-          capacity: true,
-          enrolledCount: true,
-          semesterId: true,
-          semester: {
-            select: {
-              name: true,
-            },
-          },
-          schedules: {
-            select: {
-              dayOfWeek: true,
-              startPeriod: true,
-              endPeriod: true,
-            },
-          },
-        },
-      });
-
-      if (!course) {
-        throw this.notFound('COURSE_NOT_FOUND', 'Course not found.');
-      }
+      const course = await this.lockAndGetCourse(tx, request.courseId);
 
       const existingEnrollment = await tx.enrollment.findUnique({
         where: {
@@ -67,11 +36,17 @@ export class EnrollmentsService {
       });
 
       if (existingEnrollment) {
-        throw this.conflict('ALREADY_ENROLLED', 'The student is already enrolled in this course.');
+        throw this.conflict(
+          'ALREADY_ENROLLED',
+          'The student is already enrolled in this course.',
+        );
       }
 
       if (course.enrolledCount >= course.capacity) {
-        throw this.conflict('COURSE_FULL', 'The course capacity has been reached.');
+        throw this.conflict(
+          'COURSE_FULL',
+          'The course capacity has been reached.',
+        );
       }
 
       const currentEnrollments = await tx.enrollment.findMany({
@@ -154,24 +129,8 @@ export class EnrollmentsService {
 
   async cancel(request: EnrollmentRequestDto) {
     return this.prisma.$transaction(async (tx) => {
-      const [student, course] = await Promise.all([
-        tx.student.findUnique({
-          where: { id: request.studentId },
-          select: { id: true },
-        }),
-        tx.course.findUnique({
-          where: { id: request.courseId },
-          select: { id: true },
-        }),
-      ]);
-
-      if (!student) {
-        throw this.notFound('STUDENT_NOT_FOUND', 'Student not found.');
-      }
-
-      if (!course) {
-        throw this.notFound('COURSE_NOT_FOUND', 'Course not found.');
-      }
+      await this.lockStudent(tx, request.studentId);
+      await this.lockAndGetCourse(tx, request.courseId);
 
       const enrollment = await tx.enrollment.findUnique({
         where: {
@@ -180,7 +139,9 @@ export class EnrollmentsService {
             courseId: request.courseId,
           },
         },
-        select: { id: true },
+        select: {
+          id: true,
+        },
       });
 
       if (!enrollment) {
@@ -206,6 +167,61 @@ export class EnrollmentsService {
       return {
         success: true,
       };
+    });
+  }
+
+  private async lockStudent(
+    tx: Prisma.TransactionClient,
+    studentId: number,
+  ) {
+    const rows = await tx.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+      SELECT "id"
+      FROM "Student"
+      WHERE "id" = ${studentId}
+      FOR UPDATE
+    `);
+
+    if (rows.length === 0) {
+      throw this.notFound('STUDENT_NOT_FOUND', 'Student not found.');
+    }
+  }
+
+  private async lockAndGetCourse(
+    tx: Prisma.TransactionClient,
+    courseId: number,
+  ) {
+    const rows = await tx.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+      SELECT "id"
+      FROM "Course"
+      WHERE "id" = ${courseId}
+      FOR UPDATE
+    `);
+
+    if (rows.length === 0) {
+      throw this.notFound('COURSE_NOT_FOUND', 'Course not found.');
+    }
+
+    return tx.course.findUniqueOrThrow({
+      where: { id: courseId },
+      select: {
+        id: true,
+        credits: true,
+        capacity: true,
+        enrolledCount: true,
+        semesterId: true,
+        semester: {
+          select: {
+            name: true,
+          },
+        },
+        schedules: {
+          select: {
+            dayOfWeek: true,
+            startPeriod: true,
+            endPeriod: true,
+          },
+        },
+      },
     });
   }
 
