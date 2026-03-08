@@ -66,6 +66,24 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/professors (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/professors')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.total).toBeGreaterThanOrEqual(100);
+        expect(body.limit).toBe(50);
+        expect(body.offset).toBe(0);
+        expect(body.items).toHaveLength(50);
+        expect(body.items[0]).toEqual({
+          id: expect.any(Number),
+          name: expect.any(String),
+          departmentId: expect.any(Number),
+          departmentName: expect.any(String),
+        });
+      });
+  });
+
   it('/enrollments (POST)', async () => {
     const student = await prisma.student.findFirstOrThrow({
       orderBy: { id: 'asc' },
