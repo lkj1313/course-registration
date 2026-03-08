@@ -51,4 +51,30 @@ describe('AppController (e2e)', () => {
         });
       });
   });
+
+  it('/courses (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/courses')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.total).toBeGreaterThanOrEqual(500);
+        expect(body.limit).toBe(50);
+        expect(body.offset).toBe(0);
+        expect(body.items).toHaveLength(50);
+        expect(body.items[0]).toEqual({
+          id: expect.any(Number),
+          code: expect.any(String),
+          name: expect.any(String),
+          departmentId: expect.any(Number),
+          departmentName: expect.any(String),
+          professorId: expect.any(Number),
+          professorName: expect.any(String),
+          credits: expect.any(Number),
+          capacity: expect.any(Number),
+          enrolled: expect.any(Number),
+          schedule: expect.any(String),
+          semester: expect.any(String),
+        });
+      });
+  });
 });
