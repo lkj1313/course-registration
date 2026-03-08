@@ -1,12 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-type GetStudentsQuery = {
-  departmentId?: string;
-  limit?: string;
-  offset?: string;
-};
+import { GetStudentsQueryDto } from './dto/get-students-query.dto';
 
 @Injectable()
 export class StudentsService {
@@ -15,13 +10,10 @@ export class StudentsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getStudents(query: GetStudentsQuery) {
-    const departmentId = this.parseOptionalInt(query.departmentId, 'departmentId', {
-      min: 1,
-    });
-    const limit = this.parseOptionalInt(query.limit, 'limit', { min: 1 }) ?? this.defaultLimit;
-    const offset =
-      this.parseOptionalInt(query.offset, 'offset', { min: 0 }) ?? this.defaultOffset;
+  async getStudents(query: GetStudentsQueryDto) {
+    const departmentId = query.departmentId;
+    const limit = query.limit ?? this.defaultLimit;
+    const offset = query.offset ?? this.defaultOffset;
 
     const where: Prisma.StudentWhereInput = departmentId
       ? { departmentId }
@@ -56,29 +48,5 @@ export class StudentsService {
       limit,
       offset,
     };
-  }
-
-  private parseOptionalInt(
-    value: string | undefined,
-    fieldName: string,
-    options: { min: number },
-  ) {
-    if (value === undefined) {
-      return undefined;
-    }
-
-    if (!/^\d+$/.test(value)) {
-      throw new BadRequestException(`${fieldName} must be a valid integer.`);
-    }
-
-    const parsed = Number(value);
-
-    if (!Number.isSafeInteger(parsed) || parsed < options.min) {
-      throw new BadRequestException(
-        `${fieldName} must be an integer greater than or equal to ${options.min}.`,
-      );
-    }
-
-    return parsed;
   }
 }

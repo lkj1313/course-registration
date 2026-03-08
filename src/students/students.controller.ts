@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, ValidationPipe } from '@nestjs/common';
+import { GetStudentsQueryDto } from './dto/get-students-query.dto';
 import { StudentsService } from './students.service';
 
 @Controller('students')
@@ -7,14 +8,14 @@ export class StudentsController {
 
   @Get()
   getStudents(
-    @Query('departmentId') departmentId?: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
+    @Query(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+      }),
+    )
+    query: GetStudentsQueryDto,
   ) {
-    return this.studentsService.getStudents({
-      departmentId,
-      limit,
-      offset,
-    });
+    return this.studentsService.getStudents(query);
   }
 }
