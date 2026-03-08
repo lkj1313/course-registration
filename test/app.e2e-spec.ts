@@ -84,6 +84,87 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('/students/:studentId/timetable (GET)', async () => {
+    const student = await prisma.student.findFirstOrThrow({
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        studentNumber: true,
+        name: true,
+        departmentId: true,
+        department: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+    const semester = await prisma.semester.findFirstOrThrow({
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true },
+    });
+    const courses = await prisma.course.findMany({
+      where: {
+        semesterId: semester.id,
+      },
+      orderBy: { id: 'asc' },
+      take: 2,
+      select: {
+        id: true,
+        credits: true,
+        code: true,
+        name: true,
+        professor: {
+          select: {
+            name: true,
+          },
+        },
+        schedules: {
+          orderBy: [{ dayOfWeek: 'asc' }, { startPeriod: 'asc' }],
+          select: {
+            dayOfWeek: true,
+            startPeriod: true,
+            endPeriod: true,
+          },
+        },
+      },
+    });
+
+    await prisma.enrollment.createMany({
+      data: courses.map((course) => ({
+        studentId: student.id,
+        courseId: course.id,
+        semesterId: semester.id,
+      })),
+    });
+
+    await request(app.getHttpServer())
+      .get(`/students/${student.id}/timetable`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.student).toEqual({
+          id: student.id,
+          studentNumber: student.studentNumber,
+          name: student.name,
+          departmentId: student.departmentId,
+          departmentName: student.department.name,
+        });
+        expect(body.semester).toBe(semester.name);
+        expect(body.totalCredits).toBe(
+          courses.reduce((sum, course) => sum + course.credits, 0),
+        );
+        expect(body.items).toHaveLength(2);
+        expect(body.items[0]).toEqual({
+          courseId: expect.any(Number),
+          code: expect.any(String),
+          name: expect.any(String),
+          credits: expect.any(Number),
+          professorName: expect.any(String),
+          schedule: expect.any(String),
+        });
+      });
+  });
+
   it('/enrollments (POST)', async () => {
     const student = await prisma.student.findFirstOrThrow({
       orderBy: { id: 'asc' },
